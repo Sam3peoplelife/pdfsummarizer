@@ -7,38 +7,30 @@ function App() {
   const [summary, setSummary] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [promptResponse, setPromptResponse] = useState('');
+  const [isPrompting, setIsPrompting] = useState(false);
+  const [aiSupported, setAiSupported] = useState(true);
 
-  // Writing states
-  const [showWritingForm, setShowWritingForm] = useState(false);
-  const [writingPrompt, setWritingPrompt] = useState('');
-  const [generatedText, setGeneratedText] = useState('');
-  const [writingOptions, setWritingOptions] = useState(null);
-  const [selectedOptions, setSelectedOptions] = useState({
-    tone: 'professional',
-    format: 'email',
-    length: 'medium'
-  });
+  const [summaryType, setSummaryType] = useState('key-points');
+  const [summaryFormat, setSummaryFormat] = useState('markdown');
+  const [summaryLength, setSummaryLength] = useState('short');
 
-  // Fetch writing options on component mount
+  // Check AI API support on component mount
   useEffect(() => {
-    fetchWritingOptions();
+    if (!window.ai || !window.ai.languageModel) {
+      setAiSupported(false);
+      setError('Your browser does not support the AI API. Please use Chrome with AI features enabled.');
+    }
   }, []);
 
-  const fetchWritingOptions = async () => {
-    try {
-      const response = await axios.get('http://localhost:5000/writing-options');
-      setWritingOptions(response.data);
-    } catch (error) {
-      console.error('Error fetching writing options:', error);
-    }
-  };
-
-  // Summarization functions
   const handleFileChange = (e) => {
     setPdfFile(e.target.files[0]);
     setError('');
-    setShowWritingForm(false);
-    setGeneratedText('');
+    // Reset states when new file is selected
+    setPdfText('');
+    setSummary('');
+    setPromptResponse('');
   };
 
   const handleUpload = async () => {
@@ -54,6 +46,7 @@ function App() {
     formData.append('file', pdfFile);
 
     try {
+      // Upload PDF and get text
       const response = await axios.post('http://localhost:5000/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -66,15 +59,15 @@ function App() {
         setError('Warning: Text length exceeds maximum limit. Summary may be incomplete.');
       }
 
+      // Create summarization session with correct format options
       const session = await window.ai.summarizer.create({
-        type: 'key-points',
-        format: 'markdown',
-        length: 'short'
+        type: summaryType,
+        format: summaryFormat,
+        length: summaryLength
       });
 
       const summaryResult = await session.summarize(response.data.text);
       setSummary(summaryResult);
-      setShowWritingForm(true);
 
       await session.destroy();
 
@@ -86,32 +79,52 @@ function App() {
     }
   };
 
-  // Writing functions
-  const handleWritingSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    
+  const handlePromptSubmit = async () => {
+    if (!prompt.trim()) {
+      setError('Please enter a question');
+      return;
+    }
+
+    if (!aiSupported) {
+      setError('AI features are not supported in your browser');
+      return;
+    }
+
+    setIsPrompting(true);
+    setError('');
+
     try {
-      const response = await axios.post('http://localhost:5000/write', {
-        prompt: writingPrompt,
-        ...selectedOptions,
-        context: summary // Using the summary as context
+      const session = await window.ai.languageModel.create({
+        temperature: 0.7,
+        topK: 40
       });
 
-      setGeneratedText(response.data.result.generatedText);
+      const fullPrompt = `Context from the PDF:\n${pdfText}\n\nSummary:\n${summary}\n\nQuestion: ${prompt}`;
+      const stream = await session.promptStreaming(fullPrompt);
+      let response = '';
+
+      for await (const chunk of stream) {
+        response = chunk.trim();
+        setPromptResponse(response);
+      }
+
+      await session.destroy();
     } catch (error) {
-      setError('Error generating text: ' + error.message);
+      console.error('Prompt error:', error);
+      setError(error.message || 'Failed to get AI response');
     } finally {
-      setIsLoading(false);
+      setIsPrompting(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
-      <h1 style={{ textAlign: 'center' }}>PDF Text Extractor and Summarizer</h1>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+      <h1 style={{ textAlign: 'center', marginBottom: '30px' }}>
+        PDF Text Extractor and AI Assistant
+      </h1>
       
       {/* File Upload Section */}
-      <div style={{ marginBottom: '20px' }}>
+      <div style={{ marginBottom: '30px', textAlign: 'center' }}>
         <input 
           type="file" 
           accept=".pdf" 
@@ -120,158 +133,178 @@ function App() {
         />
         <button 
           onClick={handleUpload}
-          disabled={isLoading}
-          style={{ padding: '5px 15px' }}
+          disabled={isLoading || !aiSupported}
+          style={{ 
+            padding: '8px 20px',
+            backgroundColor: '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: isLoading ? 'not-allowed' : 'pointer'
+          }}
         >
           {isLoading ? 'Processing...' : 'Upload & Summarize'}
         </button>
       </div>
 
+      {/* Summary Options */}
+      <fieldset style={{ marginBottom: '30px', padding: '15px', borderRadius: '4px' }}>
+        <legend>Summary Options</legend>
+        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+          <div>
+            <label htmlFor="type">Summary Type: </label>
+            <select 
+              id="type"
+              value={summaryType} 
+              onChange={(e) => setSummaryType(e.target.value)}
+              style={{ padding: '5px' }}
+            >
+              <option value="key-points">Key Points</option>
+              <option value="tl;dr">TL;DR</option>
+              <option value="teaser">Teaser</option>
+              <option value="headline">Headline</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="format">Format: </label>
+            <select 
+              id="format"
+              value={summaryFormat} 
+              onChange={(e) => setSummaryFormat(e.target.value)}
+              style={{ padding: '5px' }}
+            >
+              <option value="markdown">Markdown</option>
+              <option value="plain-text">Plain text</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="length">Length: </label>
+            <select 
+              id="length"
+              value={summaryLength} 
+              onChange={(e) => setSummaryLength(e.target.value)}
+              style={{ padding: '5px' }}
+            >
+              <option value="short">Short</option>
+              <option value="medium">Medium</option>
+              <option value="long">Long</option>
+            </select>
+          </div>
+        </div>
+      </fieldset>
+
       {/* Error Display */}
       {error && (
-        <div style={{ color: 'red', marginBottom: '20px' }}>
+        <div style={{ 
+          color: 'red', 
+          marginBottom: '20px', 
+          padding: '10px', 
+          backgroundColor: '#ffebee',
+          borderRadius: '4px',
+          textAlign: 'center'
+        }}>
           {error}
         </div>
       )}
 
       {/* Results Section */}
       {(pdfText || summary) && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-          {/* Original Text */}
-          <div>
-            <h3>Original Text:</h3>
-            <div 
-              style={{ 
+        <div style={{ marginBottom: '30px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
+            {/* Original Text */}
+            <div>
+              <h3>Original Text:</h3>
+              <div style={{ 
                 border: '1px solid #ccc', 
-                padding: '10px', 
+                padding: '15px', 
                 borderRadius: '4px',
-                maxHeight: '500px',
-                overflowY: 'auto',
-                whiteSpace: 'pre-wrap'
-              }}
-            >
-              {pdfText}
-            </div>
-          </div>
-
-          {/* Summary */}
-          <div>
-            <h3>Summary:</h3>
-            <pre 
-              style={{ 
-                border: '1px solid #ccc', 
-                padding: '10px', 
-                borderRadius: '4px',
-                maxHeight: '500px',
+                maxHeight: '400px',
                 overflowY: 'auto',
                 whiteSpace: 'pre-wrap',
-                margin: 0
-              }}
-            >
-              {summary}
-            </pre>
+                backgroundColor: '#f8f9fa'
+              }}>
+                {pdfText}
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div>
+              <h3>Summary:</h3>
+              <pre style={{ 
+                border: '1px solid #ccc', 
+                padding: '15px', 
+                borderRadius: '4px',
+                maxHeight: '400px',
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+                margin: 0,
+                backgroundColor: '#f8f9fa'
+              }}>
+                {summary}
+              </pre>
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* Writing Form */}
-      {showWritingForm && writingOptions && (
-        <div style={{ marginTop: '20px', padding: '20px', border: '1px solid #ccc', borderRadius: '4px' }}>
-          <h3>Generate Text Based on Summary</h3>
-          <form onSubmit={handleWritingSubmit}>
-            <div style={{ marginBottom: '15px' }}>
-              <label htmlFor="prompt" style={{ display: 'block', marginBottom: '5px' }}>
-                Writing Prompt:
-              </label>
-              <textarea
-                id="prompt"
-                value={writingPrompt}
-                onChange={(e) => setWritingPrompt(e.target.value)}
-                style={{ width: '100%', minHeight: '100px', padding: '8px' }}
-                placeholder="Enter your writing prompt here..."
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '15px' }}>
-              {/* Tone Selection */}
-              <div>
-                <label htmlFor="tone" style={{ display: 'block', marginBottom: '5px' }}>
-                  Tone:
-                </label>
-                <select
-                  id="tone"
-                  value={selectedOptions.tone}
-                  onChange={(e) => setSelectedOptions({...selectedOptions, tone: e.target.value})}
-                  style={{ width: '100%', padding: '5px' }}
-                >
-                  {writingOptions.tones.map(tone => (
-                    <option key={tone} value={tone}>{tone}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Format Selection */}
-              <div>
-                <label htmlFor="format" style={{ display: 'block', marginBottom: '5px' }}>
-                  Format:
-                </label>
-                <select
-                  id="format"
-                  value={selectedOptions.format}
-                  onChange={(e) => setSelectedOptions({...selectedOptions, format: e.target.value})}
-                  style={{ width: '100%', padding: '5px' }}
-                >
-                  {writingOptions.formats.map(format => (
-                    <option key={format} value={format}>{format}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Length Selection */}
-              <div>
-                <label htmlFor="length" style={{ display: 'block', marginBottom: '5px' }}>
-                  Length:
-                </label>
-                <select
-                  id="length"
-                  value={selectedOptions.length}
-                  onChange={(e) => setSelectedOptions({...selectedOptions, length: e.target.value})}
-                  style={{ width: '100%', padding: '5px' }}
-                >
-                  {writingOptions.lengths.map(length => (
-                    <option key={length} value={length}>{length}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={isLoading || !writingPrompt}
-              style={{ padding: '8px 20px' }}
-            >
-              {isLoading ? 'Generating...' : 'Generate Text'}
-            </button>
-          </form>
-
-          {/* Generated Text Display */}
-          {generatedText && (
-            <div style={{ marginTop: '20px' }}>
-              <h3>Generated Text:</h3>
-              <div 
+          {/* AI Question Section */}
+          <div style={{ marginTop: '30px' }}>
+            <h3>Ask Questions About the Text</h3>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+              <input
+                type="text"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Ask a question about the text..."
                 style={{ 
-                  border: '1px solid #ccc', 
-                  padding: '10px', 
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '4px',
+                  border: '1px solid #ccc',
+                  fontSize: '16px'
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !isPrompting) {
+                    handlePromptSubmit();
+                  }
+                }}
+              />
+              <button
+                onClick={handlePromptSubmit}
+                disabled={isPrompting || !aiSupported}
+                style={{ 
+                  padding: '10px 20px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: isPrompting ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isPrompting ? 'Processing...' : 'Ask AI'}
+              </button>
+            </div>
+
+            {/* AI Response */}
+            {promptResponse && (
+              <div>
+                <h4>AI Response:</h4>
+                <pre style={{ 
+                  border: '1px solid #ccc',
+                  padding: '15px',
                   borderRadius: '4px',
                   maxHeight: '300px',
                   overflowY: 'auto',
-                  whiteSpace: 'pre-wrap'
-                }}
-              >
-                {generatedText}
+                  whiteSpace: 'pre-wrap',
+                  margin: 0,
+                  backgroundColor: '#f8f9fa',
+                  fontSize: '16px'
+                }}>
+                  {promptResponse}
+                </pre>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>

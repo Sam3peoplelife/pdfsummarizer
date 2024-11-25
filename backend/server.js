@@ -3,11 +3,6 @@ const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const cors = require('cors');
 const path = require('path');
-const marked = require('marked');
-const createDOMPurify = require('dompurify');
-const { JSDOM } = require('jsdom');
-const window = new JSDOM('').window;
-const DOMPurify = createDOMPurify(window);
 
 const app = express();
 const upload = multer({ 
@@ -17,69 +12,6 @@ const upload = multer({
   }
 });
 
-const ai = {
-  writer: {
-    create: async (config) => {
-      return {
-        write: async (prompt) => {
-          // Implement your writing logic here
-          return `Generated content for prompt: ${prompt}`;
-        },
-        writeStream: async function* (prompt) {
-          // Implement your streaming logic here
-          yield "Streaming ";
-          yield "content ";
-          yield "for: ";
-          yield prompt;
-        }
-      };
-    }
-  },
-  rewriter: {
-    create: async (config) => {
-      return {
-        rewrite: async (text) => {
-          // Implement your rewriting logic here
-          return `Rewritten content: ${text}`;
-        }
-      };
-    }
-  },
-  promptModel: {
-    create: async (config) => {
-      const session = {
-        temperature: config.temperature || 0.7,
-        topK: config.topK || 40,
-        
-        async prompt(text) {
-          // Implement your prompt logic here
-          return `Generated response for: ${text}`;
-        },
-
-        async promptStreaming(text) {
-          // Implementation of streaming functionality
-          async function* generator() {
-            const chunks = [
-              "Processing ",
-              "your ",
-              "prompt: ",
-              text
-            ];
-            
-            for (const chunk of chunks) {
-              yield chunk;
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-          }
-          
-          return generator();
-        }
-      };
-      
-      return session;
-    }
-  }
-};
 
 // Enable CORS and JSON parsing
 app.use(cors());
@@ -100,12 +32,15 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     const dataBuffer = require('fs').readFileSync(filePath);
     const pdfData = await pdfParse(dataBuffer);
     
+    // Get text content
     const text = pdfData.text;
 
+    // Check text length
     if (text.length > MAX_MODEL_CHARS) {
       console.warn('Text exceeds maximum character limit');
     }
 
+    // Send the extracted text to client
     res.json({ 
       text: text,
       textLength: text.length,
@@ -140,10 +75,7 @@ app.get('/check-capabilities', (req, res) => {
   res.json({
     hasWriter: true,
     hasRewriter: true,
-    hasPromptModel: true,
-    maxLength: MAX_MODEL_CHARS,
-    defaultTemperature: 0.7,
-    defaultTopK: 40
+    maxLength: MAX_MODEL_CHARS
   });
 });
 
@@ -173,8 +105,108 @@ app.get('/writing-options', (req, res) => {
 });
 
 app.post('/write', async (req, res) => {
-  const { prompt, tone, length, format, context } = req.body;
+    const { prompt, tone, length, format, context } = req.body;
+    
+    try {
+      // Create writer instance with configurations
+      const writer = await ai.writer.create({
+        tone: tone,
+        length: length,
+        format: format,
+        sharedContext: context?.trim()
+      });
   
+      // Generate the text
+      const result = await writer.write(prompt);
+  
+      res.json({
+        success: true,
+        result: result
+      });
+  
+    } catch (error) {
+      console.error('Write error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+  
+  app.post('/rewrite', async (req, res) => {
+    const { text, tone, length, format, context } = req.body;
+  
+    try {
+      // Create rewriter instance with configurations
+      const rewriter = await ai.rewriter.create({
+        tone: tone,
+        length: length,
+        format: format,
+        sharedContext: context?.trim()
+      });
+  
+      // Generate the rewritten text
+      const result = await rewriter.rewrite(text);
+  
+      res.json({
+        success: true,
+        result: result
+      });
+  
+    } catch (error) {
+      console.error('Rewrite error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+  
+  app.post('/write-stream', async (req, res) => {
+    const { prompt, tone, length, format, context } = req.body;
+  
+    // Set headers for SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+  
+    try {
+      // Create writer instance with configurations
+      const writer = await ai.writer.create({
+        tone: tone,
+        length: length,
+        format: format,
+        sharedContext: context?.trim()
+      });
+  
+      // Start the streaming write process
+      const stream = await writer.writeStream(prompt);
+  
+      // Handle the stream
+      for await (const chunk of stream) {
+        if (chunk) {
+          res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+        }
+      }
+  
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+  
+    } catch (error) {
+      console.error('Stream error:', error);
+      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+      res.end();
+    }
+  
+    // Handle client disconnect
+    req.on('close', () => {
+      // Cleanup if needed
+    });
+  });
+
+app.post('/prompt', async (req, res) => {
+  const { prompt, context } = req.body;
+
   if (!prompt) {
     return res.status(400).json({
       success: false,
@@ -182,66 +214,53 @@ app.post('/write', async (req, res) => {
     });
   }
 
-  try {
-    const writer = await ai.writer.create({
-      tone: tone || 'professional',
-      length: length || 'medium',
-      format: format || 'general',
-      sharedContext: context?.trim()
-    });
-
-    const result = await writer.write(prompt);
-
-    res.json({
-      success: true,
-      result: result
-    });
-
-  } catch (error) {
-    console.error('Write error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Internal server error'
-    });
-  }
-});
-
-app.post('/rewrite', async (req, res) => {
-  const { text, tone, length, format, context } = req.body;
-
-  if (!text) {
+  if (!self.ai || !self.ai.languageModel) {
     return res.status(400).json({
       success: false,
-      error: 'No text provided'
+      error: 'AI Language Model not available'
     });
   }
 
   try {
-    const rewriter = await ai.rewriter.create({
-      tone: tone || 'professional',
-      length: length || 'medium',
-      format: format || 'general',
-      sharedContext: context?.trim()
+    // Create AI session with default settings
+    const session = await self.ai.languageModel.create({
+      temperature: Number(req.body.temperature || 0.7),
+      topK: Number(req.body.topK || 40)
     });
 
-    const result = await rewriter.rewrite(text);
+    // Format prompt with context if provided
+    const fullPrompt = context 
+      ? `Context from PDF: ${context}\n\nQuestion: ${prompt}`
+      : prompt;
+
+    // Get streaming response
+    const stream = await session.promptStreaming(fullPrompt);
+    let fullResponse = '';
+
+    for await (const chunk of stream) {
+      fullResponse = chunk.trim();
+    }
+
+    // Clean up session
+    session.destroy();
 
     res.json({
       success: true,
-      result: result
+      result: fullResponse
     });
 
   } catch (error) {
-    console.error('Rewrite error:', error);
+    console.error('Prompt error:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Internal server error'
+      error: error.message
     });
   }
 });
 
-app.post('/write-stream', async (req, res) => {
-  const { prompt, tone, length, format, context } = req.body;
+// Add streaming endpoint
+app.post('/prompt-stream', async (req, res) => {
+  const { prompt, context } = req.body;
 
   if (!prompt) {
     return res.status(400).json({
@@ -250,141 +269,81 @@ app.post('/write-stream', async (req, res) => {
     });
   }
 
+  if (!self.ai || !self.ai.languageModel) {
+    return res.status(400).json({
+      success: false,
+      error: 'AI Language Model not available'
+    });
+  }
+
+  // Set headers for Server-Sent Events
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
   try {
-    const writer = await ai.writer.create({
-      tone: tone || 'professional',
-      length: length || 'medium',
-      format: format || 'general',
-      sharedContext: context?.trim()
+    const session = await self.ai.languageModel.create({
+      temperature: Number(req.body.temperature || 0.7),
+      topK: Number(req.body.topK || 40)
     });
 
-    const stream = await writer.writeStream(prompt);
+    const fullPrompt = context 
+      ? `Context from PDF: ${context}\n\nQuestion: ${prompt}`
+      : prompt;
+
+    const stream = await session.promptStreaming(fullPrompt);
 
     for await (const chunk of stream) {
       if (chunk) {
-        res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+        res.write(`data: ${JSON.stringify({ chunk: chunk.trim() })}\n\n`);
       }
     }
 
+    // Clean up session
+    session.destroy();
+    
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
     res.end();
 
   } catch (error) {
     console.error('Stream error:', error);
-    res.write(`data: ${JSON.stringify({ error: error.message || 'Internal server error' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
     res.end();
   }
 
+  // Handle client disconnect
   req.on('close', () => {
     // Cleanup if needed
   });
 });
 
-// New Prompt API endpoints
-app.post('/create-session', async (req, res) => {
-  const { temperature, topK } = req.body;
-  
+// Get AI capabilities
+app.get('/ai-capabilities', async (req, res) => {
   try {
-    const session = await ai.promptModel.create({
-      temperature: Number(temperature) || 0.7,
-      topK: Number(topK) || 40
-    });
-    
-    res.json({
-      success: true,
-      message: 'Session created successfully'
-    });
-  } catch (error) {
-    console.error('Session creation error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to create session'
-    });
-  }
-});
-
-app.post('/prompt', async (req, res) => {
-  const { prompt, temperature, topK } = req.body;
-  
-  if (!prompt) {
-    return res.status(400).json({
-      success: false,
-      error: 'No prompt provided'
-    });
-  }
-
-  try {
-    const session = await ai.promptModel.create({
-      temperature: Number(temperature) || 0.7,
-      topK: Number(topK) || 40
-    });
-
-    const result = await session.prompt(prompt);
-    const sanitizedHtml = DOMPurify.sanitize(marked.parse(result));
-    
-    res.json({
-      success: true,
-      result: result,
-      html: sanitizedHtml
-    });
-  } catch (error) {
-    console.error('Prompt error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Internal server error'
-    });
-  }
-});
-
-app.post('/prompt-stream', async (req, res) => {
-  const { prompt, temperature, topK } = req.body;
-  
-  if (!prompt) {
-    return res.status(400).json({
-      success: false,
-      error: 'No prompt provided'
-    });
-  }
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-
-  try {
-    const session = await ai.promptModel.create({
-      temperature: Number(temperature) || 0.7,
-      topK: Number(topK) || 40
-    });
-
-    const stream = await session.promptStreaming(prompt);
-
-    for await (const chunk of stream) {
-      if (chunk) {
-        const sanitizedHtml = DOMPurify.sanitize(marked.parse(chunk));
-        res.write(`data: ${JSON.stringify({ 
-          chunk: chunk,
-          html: sanitizedHtml 
-        })}\n\n`);
-      }
+    if (!self.ai || !self.ai.languageModel) {
+      throw new Error('AI Language Model not available');
     }
 
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-    res.end();
-
+    const capabilities = await self.ai.languageModel.capabilities();
+    res.json({
+      success: true,
+      capabilities
+    });
   } catch (error) {
-    console.error('Stream error:', error);
-    res.write(`data: ${JSON.stringify({ 
-      error: error.message || 'Internal server error' 
-    })}\n\n`);
-    res.end();
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
+});
 
-  req.on('close', () => {
-    // Cleanup if needed
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error',
+    details: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 
