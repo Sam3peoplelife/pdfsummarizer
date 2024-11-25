@@ -2,19 +2,28 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 function App() {
+  // Existing state variables
   const [pdfFile, setPdfFile] = useState(null);
   const [pdfText, setPdfText] = useState('');
   const [summary, setSummary] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [aiSupported, setAiSupported] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [promptResponse, setPromptResponse] = useState('');
   const [isPrompting, setIsPrompting] = useState(false);
-  const [aiSupported, setAiSupported] = useState(true);
-
   const [summaryType, setSummaryType] = useState('key-points');
   const [summaryFormat, setSummaryFormat] = useState('markdown');
   const [summaryLength, setSummaryLength] = useState('short');
+
+  const [generatedContent, setGeneratedContent] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationPrompt, setGenerationPrompt] = useState('');
+
+  const [generationFormat, setGenerationFormat] = useState('summary');
+  const [generationTone, setGenerationTone] = useState('professional');
+  const [generationLength, setGenerationLength] = useState('medium');
+  const [generationOptions, setGenerationOptions] = useState(null);
 
   // Check AI API support on component mount
   useEffect(() => {
@@ -22,6 +31,14 @@ function App() {
       setAiSupported(false);
       setError('Your browser does not support the AI API. Please use Chrome with AI features enabled.');
     }
+  }, []);
+
+  // Fetch available generation options when component mounts
+  useEffect(() => {
+    fetch('http://localhost:5000/generation-options')
+      .then(response => response.json())
+      .then(options => setGenerationOptions(options))
+      .catch(error => console.error('Error fetching generation options:', error));
   }, []);
 
   const handleFileChange = (e) => {
@@ -114,6 +131,47 @@ function App() {
       setError(error.message || 'Failed to get AI response');
     } finally {
       setIsPrompting(false);
+    }
+  };
+
+  // New function for content generation
+  const handleGenerateContent = async () => {
+    if (!pdfText) {
+      setError('Please upload and process a PDF first');
+      return;
+    }
+  
+    if (!generationPrompt.trim()) {
+      setError('Please enter a prompt for generation');
+      return;
+    }
+  
+    setIsGenerating(true);
+    setError('');
+  
+    try {
+      const response = await fetch('http://localhost:5000/generate-content', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pdfText,
+          userPrompt: generationPrompt
+        }),
+      });
+  
+      const data = await response.json();
+      if (data.success) {
+        setGeneratedContent(data.result);
+      } else {
+        setError(data.error || 'Failed to generate content');
+      }
+    } catch (error) {
+      console.error('Generation error:', error);
+      setError(error.message || 'Failed to generate content');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -307,6 +365,73 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Content Generation Section */}
+        {pdfText && (
+          <div style={{ marginTop: '30px', borderTop: '1px solid #ccc', paddingTop: '20px' }}>
+            <h3>Generate Additional Content</h3>
+            
+            {/* Prompt Input */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '10px', 
+              marginBottom: '20px' 
+            }}>
+              <input
+                type="text"
+                value={generationPrompt}
+                onChange={(e) => setGenerationPrompt(e.target.value)}
+                placeholder="Enter your prompt (e.g., 'Create a bullet-point summary' or 'Explain this in simple terms')"
+                style={{ 
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '4px',
+                  border: '1px solid #ccc',
+                  fontSize: '16px'
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !isGenerating) {
+                    handleGenerateContent();
+                  }
+                }}
+              />
+              <button
+                onClick={handleGenerateContent}
+                disabled={isGenerating}
+                style={{ 
+                  padding: '8px 20px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: isGenerating ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isGenerating ? 'Generating...' : 'Generate'}
+              </button>
+            </div>
+
+            {/* Generated Content Display */}
+            {generatedContent && (
+              <div>
+                <h4>Generated Content:</h4>
+                <pre style={{ 
+                  border: '1px solid #ccc',
+                  padding: '15px',
+                  borderRadius: '4px',
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  margin: 0,
+                  backgroundColor: '#f8f9fa',
+                  fontSize: '16px'
+                }}>
+                  {generatedContent}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
     </div>
   );
 }
