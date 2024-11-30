@@ -200,7 +200,6 @@ app.post('/write', async (req, res) => {
   
     // Handle client disconnect
     req.on('close', () => {
-      // Cleanup if needed
     });
   });
 
@@ -313,7 +312,6 @@ app.post('/prompt-stream', async (req, res) => {
 
   // Handle client disconnect
   req.on('close', () => {
-    // Cleanup if needed
   });
 });
 
@@ -451,7 +449,6 @@ app.post('/generate-content', async (req, res) => {
   
     // Handle client disconnect
     req.on('close', () => {
-      // Add any necessary cleanup
     });
   });
   
