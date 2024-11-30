@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import './App.css';
 
 function App() {
   // Existing state variables
@@ -176,262 +177,146 @@ function App() {
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '30px' }}>
-        PDF Text Extractor and AI Assistant
-      </h1>
-      
-      {/* File Upload Section */}
-      <div style={{ marginBottom: '30px', textAlign: 'center' }}>
-        <input 
-          type="file" 
-          accept=".pdf" 
-          onChange={handleFileChange} 
-          style={{ marginRight: '10px' }}
-        />
-        <button 
-          onClick={handleUpload}
-          disabled={isLoading || !aiSupported}
-          style={{ 
-            padding: '8px 20px',
-            backgroundColor: '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: isLoading ? 'not-allowed' : 'pointer'
-          }}
-        >
-          {isLoading ? 'Processing...' : 'Upload & Summarize'}
-        </button>
-      </div>
+    <div className="notion-container">
+      {/* Header */}
+      <header className="notion-header">
+        <h1>PDF Text Extractor and AI Assistant</h1>
+      </header>
 
-      {/* Summary Options */}
-      <fieldset style={{ marginBottom: '30px', padding: '15px', borderRadius: '4px' }}>
-        <legend>Summary Options</legend>
-        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
-          <div>
-            <label htmlFor="type">Summary Type: </label>
-            <select 
-              id="type"
-              value={summaryType} 
-              onChange={(e) => setSummaryType(e.target.value)}
-              style={{ padding: '5px' }}
+      {/* Main Content */}
+      <main className="notion-main">
+        {/* File Upload Section */}
+        <section className="notion-section">
+          <div className="upload-container">
+            <input 
+              type="file" 
+              accept=".pdf" 
+              onChange={handleFileChange} 
+              className="notion-file-input"
+            />
+            <button 
+              onClick={handleUpload}
+              disabled={isLoading || !aiSupported}
+              className={`notion-button ${isLoading ? 'loading' : ''}`}
             >
-              <option value="key-points">Key Points</option>
-              <option value="tl;dr">TL;DR</option>
-              <option value="teaser">Teaser</option>
-              <option value="headline">Headline</option>
-            </select>
+              {isLoading ? 'Processing...' : 'Upload & Summarize'}
+            </button>
           </div>
+        </section>
 
-          <div>
-            <label htmlFor="format">Format: </label>
-            <select 
-              id="format"
-              value={summaryFormat} 
-              onChange={(e) => setSummaryFormat(e.target.value)}
-              style={{ padding: '5px' }}
-            >
-              <option value="markdown">Markdown</option>
-              <option value="plain-text">Plain text</option>
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="length">Length: </label>
-            <select 
-              id="length"
-              value={summaryLength} 
-              onChange={(e) => setSummaryLength(e.target.value)}
-              style={{ padding: '5px' }}
-            >
-              <option value="short">Short</option>
-              <option value="medium">Medium</option>
-              <option value="long">Long</option>
-            </select>
-          </div>
-        </div>
-      </fieldset>
-
-      {/* Error Display */}
-      {error && (
-        <div style={{ 
-          color: 'red', 
-          marginBottom: '20px', 
-          padding: '10px', 
-          backgroundColor: '#ffebee',
-          borderRadius: '4px',
-          textAlign: 'center'
-        }}>
-          {error}
-        </div>
-      )}
-
-      {/* Results Section */}
-      {(pdfText || summary) && (
-        <div style={{ marginBottom: '30px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
-            {/* Original Text */}
-            <div>
-              <h3>Original Text:</h3>
-              <div style={{ 
-                border: '1px solid #ccc', 
-                padding: '15px', 
-                borderRadius: '4px',
-                maxHeight: '400px',
-                overflowY: 'auto',
-                whiteSpace: 'pre-wrap',
-                backgroundColor: '#f8f9fa'
-              }}>
-                {pdfText}
-              </div>
-            </div>
-
-            {/* Summary */}
-            <div>
-              <h3>Summary:</h3>
-              <pre style={{ 
-                border: '1px solid #ccc', 
-                padding: '15px', 
-                borderRadius: '4px',
-                maxHeight: '400px',
-                overflowY: 'auto',
-                whiteSpace: 'pre-wrap',
-                margin: 0,
-                backgroundColor: '#f8f9fa'
-              }}>
-                {summary}
-              </pre>
-            </div>
-          </div>
-
-          {/* AI Question Section */}
-          <div style={{ marginTop: '30px' }}>
-            <h3>Ask Questions About the Text</h3>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-              <input
-                type="text"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Ask a question about the text..."
-                style={{ 
-                  flex: 1,
-                  padding: '10px',
-                  borderRadius: '4px',
-                  border: '1px solid #ccc',
-                  fontSize: '16px'
-                }}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !isPrompting) {
-                    handlePromptSubmit();
-                  }
-                }}
-              />
-              <button
-                onClick={handlePromptSubmit}
-                disabled={isPrompting || !aiSupported}
-                style={{ 
-                  padding: '10px 20px',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: isPrompting ? 'not-allowed' : 'pointer'
-                }}
+        {/* Summary Options */}
+        <section className="notion-section">
+          <div className="notion-options">
+            <div className="option-group">
+              <label htmlFor="type">Summary Type</label>
+              <select 
+                id="type"
+                value={summaryType} 
+                onChange={(e) => setSummaryType(e.target.value)}
+                className="notion-select"
               >
-                {isPrompting ? 'Processing...' : 'Ask AI'}
-              </button>
+                <option value="key-points">Key Points</option>
+                <option value="tl;dr">TL;DR</option>
+                <option value="teaser">Teaser</option>
+                <option value="headline">Headline</option>
+              </select>
             </div>
 
-            {/* AI Response */}
-            {promptResponse && (
-              <div>
-                <h4>AI Response:</h4>
-                <pre style={{ 
-                  border: '1px solid #ccc',
-                  padding: '15px',
-                  borderRadius: '4px',
-                  maxHeight: '300px',
-                  overflowY: 'auto',
-                  whiteSpace: 'pre-wrap',
-                  margin: 0,
-                  backgroundColor: '#f8f9fa',
-                  fontSize: '16px'
-                }}>
-                  {promptResponse}
-                </pre>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Content Generation Section */}
-        {pdfText && (
-          <div style={{ marginTop: '30px', borderTop: '1px solid #ccc', paddingTop: '20px' }}>
-            <h3>Generate Additional Content</h3>
-            
-            {/* Prompt Input */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '10px', 
-              marginBottom: '20px' 
-            }}>
-              <input
-                type="text"
-                value={generationPrompt}
-                onChange={(e) => setGenerationPrompt(e.target.value)}
-                placeholder="Enter your prompt (e.g., 'Create a bullet-point summary' or 'Explain this in simple terms')"
-                style={{ 
-                  flex: 1,
-                  padding: '10px',
-                  borderRadius: '4px',
-                  border: '1px solid #ccc',
-                  fontSize: '16px'
-                }}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !isGenerating) {
-                    handleGenerateContent();
-                  }
-                }}
-              />
-              <button
-                onClick={handleGenerateContent}
-                disabled={isGenerating}
-                style={{ 
-                  padding: '8px 20px',
-                  backgroundColor: '#6c757d',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: isGenerating ? 'not-allowed' : 'pointer'
-                }}
+            <div className="option-group">
+              <label htmlFor="format">Format</label>
+              <select 
+                id="format"
+                value={summaryFormat} 
+                onChange={(e) => setSummaryFormat(e.target.value)}
+                className="notion-select"
               >
-                {isGenerating ? 'Generating...' : 'Generate'}
-              </button>
+                <option value="markdown">Markdown</option>
+                <option value="plain-text">Plain text</option>
+              </select>
             </div>
 
-            {/* Generated Content Display */}
-            {generatedContent && (
-              <div>
-                <h4>Generated Content:</h4>
-                <pre style={{ 
-                  border: '1px solid #ccc',
-                  padding: '15px',
-                  borderRadius: '4px',
-                  maxHeight: '300px',
-                  overflowY: 'auto',
-                  whiteSpace: 'pre-wrap',
-                  margin: 0,
-                  backgroundColor: '#f8f9fa',
-                  fontSize: '16px'
-                }}>
-                  {generatedContent}
-                </pre>
-              </div>
-            )}
+            <div className="option-group">
+              <label htmlFor="length">Length</label>
+              <select 
+                id="length"
+                value={summaryLength} 
+                onChange={(e) => setSummaryLength(e.target.value)}
+                className="notion-select"
+              >
+                <option value="short">Short</option>
+                <option value="medium">Medium</option>
+                <option value="long">Long</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        {/* Error Display */}
+        {error && (
+          <div className="notion-callout error">
+            {error}
           </div>
         )}
+
+        {/* Results Section */}
+        {(pdfText || summary) && (
+          <section className="notion-section results">
+            <div className="notion-columns">
+              {/* Original Text */}
+              <div className="notion-column">
+                <h3>Original Text</h3>
+                <div className="notion-content-box">
+                  {pdfText}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="notion-column">
+                <h3>Summary</h3>
+                <div className="notion-content-box">
+                  {summary}
+                </div>
+              </div>
+            </div>
+
+            {/* AI Question Section */}
+            <div className="notion-ai-section">
+              <h3>Ask Questions About the Text</h3>
+              <div className="notion-input-group">
+                <input
+                  type="text"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Ask a question about the text..."
+                  className="notion-input"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !isPrompting) {
+                      handlePromptSubmit();
+                    }
+                  }}
+                />
+                <button
+                  onClick={handlePromptSubmit}
+                  disabled={isPrompting || !aiSupported}
+                  className={`notion-button secondary ${isPrompting ? 'loading' : ''}`}
+                >
+                  {isPrompting ? 'Processing...' : 'Ask AI'}
+                </button>
+              </div>
+
+              {/* AI Response */}
+              {promptResponse && (
+                <div className="notion-response">
+                  <h4>AI Response</h4>
+                  <div className="notion-content-box">
+                    {promptResponse}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+      </main>
     </div>
   );
 }
